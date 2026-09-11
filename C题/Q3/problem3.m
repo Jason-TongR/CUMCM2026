@@ -21,7 +21,7 @@ for i = 1:size(raw3,1)
     nonempty = ~(isempty(cc) || (ischar(cc) && isempty(strtrim(cc))) || ...
                  (isstring(cc) && ismissing(cc)) || (isnumeric(cc) && isnan(cc)));
     if nonempty, d = d + 1; end
-    issue = sscanf(raw3{i,2}, '%d:%*s');
+    issue = sscanf(char(raw3{i,2}), '%d:%*s');   % char() 兼容 string/char 两种读取类型
     ii = find(issue == [0 6 12 18]);
     FORE(d, :, ii) = cellfun(@double, raw3(i, 3:26));
 end
@@ -252,7 +252,7 @@ function [p, ch, dis] = lp_adjust(a, Lh10, Ph10, S_start, p_plan_seg, price, ...
                                   ETA_C, ETA_D, PMAX, SMIN, SMAX, T, ADJ_PRE, EMULT, opts)
 % 双向调整, 末端自由, 带5c安全阀; u±边际费率均为 ADJ_PRE=0.5c
 n = T - a + 1; o = 4*n; m = 5*n+1; M = m + 3*n; dt = 1/6;
-iu = m+1:m+2*n; ie = m+2*n+1:M;
+iu1 = m+1:m+n; iu2 = m+n+1:m+2*n; ie = m+2*n+1:M;   % u+ / u- / e 三块索引
 ip = 1:n; ich = n+1:2*n; idi = 2*n+1:3*n; iq = 3*n+1:4*n; is = o+1:m;
 nrow = 3*n + 1;
 Ii = [1:n, 1:n, 1:n, 1:n, 1:n, n+(1:n), n+(1:n), n+(1:n), n+(1:n), 2*n+1];
@@ -261,12 +261,12 @@ Vv = [ones(1,n), ones(1,n), ones(1,n), -ones(1,n), -ones(1,n), ones(1,n), -ones(
       -ETA_C*dt*ones(1,n), (dt/ETA_D)*ones(1,n), 1];
 rows_u = 2*n+1 + (1:n);
 Ii = [Ii, rows_u, rows_u, rows_u];
-Jj = [Jj, ip, iu, iu+n];
+Jj = [Jj, ip, iu1, iu2];
 Vv = [Vv, ones(1,n), -ones(1,n), ones(1,n)];
 Aeq = sparse(Ii, Jj, Vv, nrow, M);
 beq = [Lh10(a:T) - Ph10(a:T); zeros(n,1); S_start; p_plan_seg];
 f = zeros(M,1);
-f(ip) = price(a:T)*dt; f(iu) = ADJ_PRE*price(a:T)*dt; f(iu+n) = ADJ_PRE*price(a:T)*dt; f(ie) = EMULT*price(a:T)*dt;
+f(ip) = price(a:T)*dt; f(iu1) = ADJ_PRE*price(a:T)*dt; f(iu2) = ADJ_PRE*price(a:T)*dt; f(ie) = EMULT*price(a:T)*dt;
 lb = zeros(M,1); ub = inf(M,1);
 ub(ich) = PMAX; ub(idi) = PMAX; lb(is) = SMIN; ub(is) = SMAX;
 [x, ~, exitflag] = linprog(f, [], [], Aeq, beq, lb, ub, opts);
