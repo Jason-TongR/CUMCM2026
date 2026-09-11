@@ -1,0 +1,9 @@
+Error using sparse
+Vectors must be the same length.
+
+Error in problem3>lp_adjust (line 266)
+Aeq = sparse(Ii, Jj, Vv, nrow, M);
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error in problem3 (line 71)
+            [p_new, ch_new, dis_new] = lp_adjust(a, Lh10*GAMMA, PVh10*DELTA, S(a), ...
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
