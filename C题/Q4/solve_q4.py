@@ -5,7 +5,7 @@ CUMCM 2026 C题 问题4 —— 波动电价下重算问题2/问题3
 电价: 附件4 逐日曲线(365×144), 假设日前可知(日前市场公布);
      紧急购电=当时实际电价×5, 调整结算=附件4实际价格。
 Q4-2 = 问题2最终策略(w1预测, γ=1.05, δ=0.98) 换波动电价 → result4-2.xlsx
-Q4-3 = 问题3最终策略(V4F, γ=1.02, δ=0.98) 换波动电价 → result4-3.xlsx
+Q4-3 = 问题3最终策略(V4FR: 备用>=4000, γ=1.02, δ=1.00) 换波动电价 → result4-3.xlsx
 """
 import json
 import importlib.util
@@ -56,7 +56,7 @@ print(f"紧急购电量 {E_e2:,.1f} kWh, 紧急购电费 {C_e2:,.2f} 元, 天数
 print(f"总费用 {C2:,.2f} 元   (恒定电价问题2: 14,546,503.97 元, 差 {C2-14546503.97:+,.2f})")
 
 # ================= Q4-3: 问题3策略 × 波动电价 =================
-R3 = q3.run_year("V4F", GAMMA=1.02, DELTA=0.98, prices=PM)
+R3 = q3.run_year("V4FR", GAMMA=1.02, DELTA=1.00, prices=PM, S_MIN_END=4000.0)
 s3 = q3.settle(R3, rep, prices=PM)
 ed3 = int((R3["Emerg"][rep].sum(1) > 1e-9).sum())
 assert R3["Sall"].min() >= 1200 - 1e-6 and R3["Sall"].max() <= 10800 + 1e-6
@@ -64,7 +64,7 @@ viol = sum(1 for d in range(NDAY) for t in range(T)
            if R3["Emerg"][d, t] > 1e-9 and not (R3["ch_r"][d, t] < 1e-9 and
            (R3["dis_r"][d, t] > 5000 - 1e-6 or R3["Sall"][d, t + 1] < 1200 + 1e-6)))
 assert viol == 0, f"紧急购电语义违规 {viol}"
-print("\n===== Q4-3 (问题3策略 × 波动电价) =====")
+print("\n===== Q4-3 (问题3策略V4FR(备用>=4000, δ=1.00) × 波动电价) =====")
 print(f"按调整量实付 {s3['base']:,.2f} 元, 调整违约/溢价费 {s3['fee_adj']:,.2f} 元")
 print(f"紧急购电费 {s3['emerg']:,.2f} 元, 紧急购电量 {s3['E_emerg']:,.1f} kWh, 天数 {ed3}/334")
 print(f"调整: 上调 {s3['E_adj_up']:,.1f} kWh, 下调 {s3['E_adj_dn']:,.1f} kWh")
@@ -76,8 +76,12 @@ def tag(m):
     m %= 1440
     return f"{m//60}:{m%60:02d}{plus}"
 
-blocks = [[143] + list(range(0, 23))] + [list(range(a, b))
-         for a, b in [(23, 47), (47, 71), (71, 95), (95, 119), (119, 143)]]
+# 表2 钟点日时段块: "0:00-4:00" = 前一日末段(0:00-0:10) + 当日第1-23段
+def bsum(arr, d, k):
+    if k == 0:
+        return float(arr[d - 1][143] + arr[d][0:23].sum())
+    seg = [(23, 47), (47, 71), (71, 95), (95, 119), (119, 143)][k - 1]
+    return float(arr[d][seg[0]:seg[1]].sum())
 bnames = ["0:00-4:00","4:00-8:00","8:00-12:00","12:00-16:00","16:00-20:00","20:00-24:00"]
 idx_t1 = [59, 71, 83, 95, 107, 119]
 names_t1 = ["10:00-10:10","12:00-12:10","14:00-14:10",
@@ -107,8 +111,8 @@ for d in range(NDAY):
         entry["q42"] = {
             "plan_t1": {n: float(Ep2[i]) for n, i in zip(names_t1, idx_t1)},
             "plan_total": float(Ep2.sum()), "plan_cost": float(R2["plan_cost"][d]),
-            "blocks": {n: [float((R2["ch_r"][d][b]*dt).sum()), float((R2["dis_r"][d][b]*dt).sum())]
-                       for n, b in zip(bnames, blocks)},
+            "blocks": {n: [bsum(R2["ch_r"] * dt, d, k), bsum(R2["dis_r"] * dt, d, k)]
+                       for k, n in enumerate(bnames)},
             "s000": float(R2["Sall"][d - 1][143] if d > 0 else 6000.0),
             "s2400": float(R2["Sall"][d][143]),
             "emerg_windows": emerg_windows(R2["Emerg"][d]),
@@ -122,8 +126,8 @@ for d in range(NDAY):
             "plan_total": float(Ep3.sum()), "adj_total": float(Ea3.sum()),
             "plan_cost": float(R3["plan_cost"][d]),
             "adj_settle_cost": float((Ea3 * PM[d]).sum() + 0.5 * (dev * PM[d]).sum()),
-            "blocks": {n: [float((R3["ch_r"][d][b]*dt).sum()), float((R3["dis_r"][d][b]*dt).sum())]
-                       for n, b in zip(bnames, blocks)},
+            "blocks": {n: [bsum(R3["ch_r"] * dt, d, k), bsum(R3["dis_r"] * dt, d, k)]
+                       for k, n in enumerate(bnames)},
             "s000": float(R3["Sall"][d - 1][143] if d > 0 else 6000.0),
             "s2400": float(R3["Sall"][d][143]),
             "emerg_windows": emerg_windows(R3["Emerg"][d]),
@@ -170,13 +174,13 @@ def write_result4(fname, R, has_adj):
                         [round(float(Ea.sum()), 4), round(float((R["adj_p"][d] * PM[d]).sum() * dt), 4)])
     ws2 = out.create_sheet("充放电量")
     ws2.append(["日期", "时间段", "充电量", "放电量", "时刻", "储电量"])
+    R_ch, R_dis = R["ch_r"] * dt, R["dis_r"] * dt
     for d in range(feb1, NDAY):
-        Ech, Edis = R["ch_r"][d] * dt, R["dis_r"][d] * dt
         s000 = R["Sall"][d - 1][143] if d > 0 else 6000.0
         s2400 = R["Sall"][d][143]
-        for k, (n, b) in enumerate(zip(bnames, blocks)):
+        for k, n in enumerate(bnames):
             r = [dates[d] if k == 0 else None, n,
-                 round(float(Ech[b].sum()), 4), round(float(Edis[b].sum()), 4)]
+                 round(bsum(R_ch, d, k), 4), round(bsum(R_dis, d, k), 4)]
             if k == 0:   r += [_dt.time(0, 0), round(float(s000), 4)]
             elif k == 1: r += ["24:00", round(float(s2400), 4)]
             else:        r += [None, None]

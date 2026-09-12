@@ -49,7 +49,7 @@ EMULT = 5.0
 # 结算: 超额部分按 1.5c 计价(=基础 c + 0.5c 溢价), 违约部分按 0.5c 计价
 # LP 目标中 u⁺/u⁻ 的系数均为 0.5c(相对基础价的边际)
 ADJ_UP_PRE, ADJ_DN = 0.5, 0.5
-LAM_PV, LAM_L = 0.3, 0.4
+LAM_PV, LAM_L = 0.1, 0.3     # 费用网格寻优(原MAE定标0.3/0.4超调)
 ADJ_T = [35, 71, 107]
 ISSUE_OF = {35: 6, 71: 12, 107: 18}
 feb1 = 31
@@ -98,8 +98,10 @@ def load_hour_est(d):
     return Lh[d - 1]
 
 # ---------- LP ----------
-def lp_plan(Lh10, Ph10, S0):
-    """计划LP: min Σc·p·dt, S(144)=S(0)=S0. 返回 p,ch,dis (kW, 144)"""
+def lp_plan(Lh10, Ph10, S0, price_vec=None):
+    """计划LP: min Σc·p·dt, S(144)=S(0)=S0. 返回 p,ch,dis (kW, 144)
+    price_vec: 可选当日电价(波动电价); 缺省用附件1固定电价"""
+    pr = price if price_vec is None else price_vec
     n = T; o = 4 * n; m = 5 * n + 1
     A = np.zeros((2 * n + 2, m)); b = np.zeros(2 * n + 2)
     for t in range(n):
@@ -109,18 +111,21 @@ def lp_plan(Lh10, Ph10, S0):
         A[n + t, n + t] = -ETA_C * dt; A[n + t, 2 * n + t] = dt / ETA_D
     A[2 * n, o] = 1; b[2 * n] = S0
     A[2 * n + 1, o + n] = 1; b[2 * n + 1] = S0
-    f = np.zeros(m); f[:n] = price * dt
+    f = np.zeros(m); f[:n] = pr * dt
     bnd = [(0, None)] * n + [(0, PMAX)] * 2 * n + [(0, None)] * n + [(SMIN, SMAX)] * (n + 1)
     res = linprog(f, A_eq=A, b_eq=b, bounds=bnd, method="highs")
     assert res.status == 0, "计划LP不可行"
     x = res.x
     return x[:n], x[n:2 * n], x[2 * n:3 * n]
 
-def lp_adjust(a, Lh10, Ph10, S_start, S_end, p_plan_seg, down_only=False, free_terminal=False):
+def lp_adjust(a, Lh10, Ph10, S_start, S_end, p_plan_seg, down_only=False, free_terminal=False,
+              price_vec=None, s_min_end=0.0):
     """调整LP: 区间a..143, min Σ[c·p_adj + 0.5c·(u⁺+u⁻) + 5c·e]·dt
     (u⁺ 边际 0.5c ⇒ 超额总价 1.5c; u⁻ 边际 0.5c ⇒ 违约 0.5c), s(a)=S_start
     e 为安全阀(紧急购电预期, 5c), 保证任何情形下可行;
-    down_only=True 时 p_adj ≤ p_plan; free_terminal=True 时末端仅受[SMIN,SMAX]约束"""
+    down_only=True 时 p_adj ≤ p_plan; free_terminal=True 时末端仅受[SMIN,SMAX]约束
+    price_vec: 可选当日电价(波动电价); 缺省用附件1固定电价"""
+    pr = price if price_vec is None else price_vec
     n = T - a; o = 4 * n; m = 5 * n + 1; M = m + 2 * n + n
     iu, ie = m, m + 2 * n                                # u± 与 e 的偏移
     n_eq = 3 * n + (1 if free_terminal else 2)
@@ -142,14 +147,18 @@ def lp_adjust(a, Lh10, Ph10, S_start, S_end, p_plan_seg, down_only=False, free_t
         A[row, iu + n + i] = 1
         b[row] = p_plan_seg[i]
     f = np.zeros(M)
-    f[:n] = price[a:] * dt
-    f[iu:iu + n] = ADJ_UP_PRE * price[a:] * dt
-    f[iu + n:iu + 2 * n] = ADJ_DN * price[a:] * dt
-    f[ie:] = EMULT * price[a:] * dt
+    f[:n] = pr[a:] * dt
+    f[iu:iu + n] = ADJ_UP_PRE * pr[a:] * dt
+    f[iu + n:iu + 2 * n] = ADJ_DN * pr[a:] * dt
+    f[ie:] = EMULT * pr[a:] * dt
     ub_p = p_plan_seg if down_only else [None] * n
     bnd = ([(0, ub_p[i]) for i in range(n)] + [(0, PMAX)] * 2 * n + [(0, None)] * n +
            [(SMIN, SMAX)] * (n + 1) + [(0, None)] * 2 * n + [(0, None)] * n)
-    res = linprog(f, A_eq=A, b_eq=b, bounds=bnd, method="highs")
+    A_ub = b_ub = None
+    if s_min_end > 0:
+        A_ub = np.zeros((1, M)); A_ub[0, o + n] = -1
+        b_ub = [-s_min_end]                    # 末端最低备用 s(144) >= s_min_end
+    res = linprog(f, A_eq=A, b_eq=b, A_ub=A_ub, b_ub=b_ub, bounds=bnd, method="highs")
     assert res.status == 0, f"调整LP不可行 a={a}"
     x = res.x
     return x[:n], x[n:2 * n], x[2 * n:3 * n]
@@ -195,7 +204,7 @@ def simulate_seg(ps, chs, diss, L, PV, S, a, b):
     return e, cr, dr
 
 # ---------- 全年滚动 ----------
-def run_year(mode, GAMMA=1.02, DELTA=0.98, THETA=0.0):
+def run_year(mode, GAMMA=1.02, DELTA=0.98, THETA=0.0, prices=None, S_MIN_END=0.0):
     """mode: V0 w1光伏无调整 | V1 原始预报 | V2 原始+调整 | V3 标定无调整
              V4 完整调整 | V4T 阈值调整(偏离≤THETA kW不调整) | V4D 仅下调"""
     plans_p = np.zeros((NDAY, T)); adj_p = np.zeros((NDAY, T))
@@ -210,11 +219,13 @@ def run_year(mode, GAMMA=1.02, DELTA=0.98, THETA=0.0):
             PVh10 = to_10min(d, pv_hour_est(d, 0, calib=True))
         Lh10 = load_est(d); Lh_h = load_hour_est(d)
         S0 = 6000.0 if d == 0 else Sall[d - 1, T]
-        ps, chs, diss = lp_plan(Lh10 * GAMMA, PVh10 * DELTA, S0)
-        plans_p[d] = ps; plan_cost[d] = float((ps * price).sum() * dt)
+        pv_d = None if prices is None else prices[d]
+        ps, chs, diss = lp_plan(Lh10 * GAMMA, PVh10 * DELTA, S0, pv_d)
+        plans_p[d] = ps
+        plan_cost[d] = float((ps * (price if pv_d is None else pv_d)).sum() * dt)
         p_adj = ps.copy()
         S = Sall[d]; S[0] = S0
-        do_adj = mode in ("V2", "V4", "V4F", "V4T", "V4D")
+        do_adj = mode in ("V2", "V4", "V4F", "V4FR", "V4T", "V4D")
         bounds = [0, ADJ_T[0], ADJ_T[1], ADJ_T[2], T]
         for si in range(4):
             a, b = bounds[si], bounds[si + 1]
@@ -238,10 +249,11 @@ def run_year(mode, GAMMA=1.02, DELTA=0.98, THETA=0.0):
                 if mode == "V4D":
                     p_new, ch_new, dis_new = lp_adjust(a, Lh10 * GAMMA, PVh10 * DELTA,
                                                        S[a], S0, plans_p[d][a:],
-                                                       down_only=True, free_terminal=True)
+                                                       down_only=True, free_terminal=True,
+                                                       price_vec=pv_d)
                 elif mode == "V4T":
                     p_lp, _, _ = lp_adjust(a, Lh10 * GAMMA, PVh10 * DELTA,
-                                           S[a], S0, plans_p[d][a:])
+                                           S[a], S0, plans_p[d][a:], price_vec=pv_d)
                     mask = np.abs(p_lp - plans_p[d][a:]) > THETA
                     p_new = np.where(mask, p_lp, plans_p[d][a:])
                     ch_new, dis_new = lp_storage_only(a, Lh10 * GAMMA, PVh10 * DELTA,
@@ -249,7 +261,9 @@ def run_year(mode, GAMMA=1.02, DELTA=0.98, THETA=0.0):
                 else:
                     p_new, ch_new, dis_new = lp_adjust(a, Lh10 * GAMMA, PVh10 * DELTA,
                                                        S[a], S0, plans_p[d][a:],
-                                                       free_terminal=(mode == "V4F"))
+                                                       free_terminal=(mode in ("V4F", "V4FR")),
+                                                       price_vec=pv_d,
+                                                       s_min_end=(S_MIN_END if mode == "V4FR" else 0.0))
                 p_adj[a:], chs[a:], diss[a:] = p_new, ch_new, dis_new
             e, cr, dr = simulate_seg(p_adj, chs, diss, LD[d], PVD[d], S, a, b)
             Emerg[d, a:b] = e; ch_r[d, a:b] = cr; dis_r[d, a:b] = dr
@@ -257,15 +271,17 @@ def run_year(mode, GAMMA=1.02, DELTA=0.98, THETA=0.0):
     return dict(plans_p=plans_p, adj_p=adj_p, Emerg=Emerg, ch_r=ch_r,
                 dis_r=dis_r, Sall=Sall, plan_cost=plan_cost)
 
-def settle(R, sl):
+def settle(R, sl, prices=None):
     """费用结算: C = Σ[c·p_adj]dt + Σ[0.5c·u⁻ + 0.5c·u⁺]dt + Σ5c·e·dt
-    (等价于 Σ[c·min+0.5c·(plan-adj)⁺+1.5c·(adj-plan)⁺]dt + 紧急)"""
+    (等价于 Σ[c·min+0.5c·(plan-adj)⁺+1.5c·(adj-plan)⁺]dt + 紧急)
+    prices: 可选(365×144)逐日电价矩阵(波动电价)"""
     pp = R["plans_p"][sl]; pa = R["adj_p"][sl]; e = R["Emerg"][sl]
-    base = float((pa * price).sum() * dt)
+    pr = price.reshape(1, T) if prices is None else prices[sl]
+    base = float((pa * pr).sum() * dt)
     up = np.maximum(pa - pp, 0.0); dn = np.maximum(pp - pa, 0.0)
-    fee_adj = float(((ADJ_UP_PRE * up + ADJ_DN * dn) * price).sum() * dt)
-    emerg = float((e * price * EMULT).sum() * dt)
-    plan_nominal = float((pp * price).sum() * dt)
+    fee_adj = float(((ADJ_UP_PRE * up + ADJ_DN * dn) * pr).sum() * dt)
+    emerg = float((e * pr * EMULT).sum() * dt)
+    plan_nominal = float((pp * pr).sum() * dt)
     return dict(total=base + fee_adj + emerg, base=base, fee_adj=fee_adj,
                 emerg=emerg, plan_nominal=plan_nominal,
                 E_emerg=float(e.sum() * dt),

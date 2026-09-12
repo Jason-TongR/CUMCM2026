@@ -1,6 +1,6 @@
-%% CUMCM2026 C题 问题3 —— 计划+滚动调整购电策略 (最终策略 V4F)
+%% CUMCM2026 C题 问题3 —— 计划+滚动调整购电策略 (最终策略 V4FR: V4F+末端备用>=4000)
 % 标定光伏(逐时OLS[官方报,w1],30天滚动) + 双向调整(超额1.5倍总价/违约0.5倍) + 日内储能调节 + 紧急5倍
-% 参考解(Python/HiGHS): 总费用 13,825,638 元 = 实付 13,036,133 + 违约/溢价 363,190 + 紧急 426,315
+% 参考解(Python/HiGHS): 总费用 13,771,900 元级 (V4FR, 精确值见 summary3.json)
 %   调整: 上调 638,431 kWh / 下调 457,921 kWh; 紧急购电量 91,359 kWh, 紧急天数 222/334
 clear; clc;
 thisdir = fileparts(mfilename('fullpath'));
@@ -29,7 +29,7 @@ end
 %% ---------------- 2. 参数 ----------------
 ETA_C = 0.9; ETA_D = 0.9; PMAX = 5000; SMIN = 1200; SMAX = 10800;
 EMULT = 5; ADJ_PRE = 0.5;                        % 上/下调相对基础价的边际费率(超额总价1.5c/违约0.5c)
-GAMMA = 1.02; DELTA = 0.98; LAM_PV = 0.3; LAM_L = 0.4;
+GAMMA = 1.02; DELTA = 0.98; LAM_PV = 0.1; LAM_L = 0.3;   % 费用网格寻优
 ADJ_T = [36 72 108];                             % 调整起始区间(1基): 6:00/12:00/18:00
 ISSUE = [6 12 18];
 feb1 = 32;
@@ -85,7 +85,7 @@ sl = feb1:NDAY;
 base = sum(adj_p(sl,:).*price','all')*dt;
 fee_adj = sum((ADJ_PRE*up(sl,:) + ADJ_PRE*dn(sl,:)).*price','all')*dt;
 C_e = sum(Emerg(sl,:).*price'.*EMULT,'all')*dt;
-fprintf('===== 问题3 最终策略 V4F =====\n');
+fprintf('===== 问题3 最终策略 V4FR =====\n');
 fprintf('计划购电费(0:00口径) %.2f 元\n', sum(plan_cost(sl)));
 fprintf('按调整量实付 %.2f 元, 违约/溢价费 %.2f 元\n', base, fee_adj);
 fprintf('紧急购电费 %.2f 元, 紧急购电量 %.1f kWh\n', C_e, sum(Emerg(sl,:),'all')*dt);
@@ -107,8 +107,13 @@ for td = target
     fprintf('计划购电量 %.2f -> 调整购电量 %.2f kWh, 计划购电费 %.2f 元\n', sum(Ep), sum(Ea), plan_cost(d));
     for k = 1:6, fprintf('  %s: %.4f\n', nameT1{k}, Ea(rowT1(k))); end
     for k = 1:6
-        fprintf('  %s: 充电 %.4f  放电 %.4f\n', bname{k}, ...
-            sum(ch_r(d,blocks{k}))*dt, sum(dis_r(d,blocks{k}))*dt);
+        if k == 1
+            ebch = ch_r(d-1,144)*dt + sum(ch_r(d,1:23))*dt;
+            ebdis = dis_r(d-1,144)*dt + sum(dis_r(d,1:23))*dt;
+        else
+            ebch = sum(ch_r(d,blocks{k}))*dt; ebdis = sum(dis_r(d,blocks{k}))*dt;
+        end
+        fprintf('  %s: 充电 %.4f  放电 %.4f\n', bname{k}, ebch, ebdis);
     end
     s000 = 6000; if d > 1, s000 = Sall(d-1,144); end
     fprintf('  s(0:00)=%.2f, s(24:00)=%.2f\n', s000, Sall(d,144));
@@ -153,8 +158,13 @@ for i = 1:334
         r = (i-1)*6 + k + 1;
         if k == 1, C2{r,1} = dvec(d); end
         C2{r,2} = bname{k};
-        C2{r,3} = round(sum(ch_r(d,blocks{k}))*dt, 4);
-        C2{r,4} = round(sum(dis_r(d,blocks{k}))*dt, 4);
+        if k == 1
+            C2{r,3} = round(ch_r(d-1,144)*dt + sum(ch_r(d,1:23))*dt, 4);
+            C2{r,4} = round(dis_r(d-1,144)*dt + sum(dis_r(d,1:23))*dt, 4);
+        else
+            C2{r,3} = round(sum(ch_r(d,blocks{k}))*dt, 4);
+            C2{r,4} = round(sum(dis_r(d,blocks{k}))*dt, 4);
+        end
         if k == 1, C2{r,5} = '0:00';  C2{r,6} = round(s000,4); end
         if k == 2, C2{r,5} = '24:00'; C2{r,6} = round(Sall(d,144),4); end
     end
@@ -269,7 +279,8 @@ f = zeros(M,1);
 f(ip) = price(a:T)*dt; f(iu1) = ADJ_PRE*price(a:T)*dt; f(iu2) = ADJ_PRE*price(a:T)*dt; f(ie) = EMULT*price(a:T)*dt;
 lb = zeros(M,1); ub = inf(M,1);
 ub(ich) = PMAX; ub(idi) = PMAX; lb(is) = SMIN; ub(is) = SMAX;
-[x, ~, exitflag] = linprog(f, [], [], Aeq, beq, lb, ub, opts);
+Aub = sparse(1, M); Aub(1, is(n+1)) = -1; bub = -4000;   % 末端最低备用 S(24:00)>=4000
+[x, ~, exitflag] = linprog(f, Aub, bub, Aeq, beq, lb, ub, opts);
 assert(exitflag==1, '调整LP不可行 a=%d', a);
 p = x(ip); ch = x(ich); dis = x(idi);
 end

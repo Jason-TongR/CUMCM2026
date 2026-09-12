@@ -98,12 +98,17 @@ target = [datetime(2025,3,20), datetime(2025,6,21), datetime(2025,9,23), datetim
 for td = target
     d = find(dvec == td);
     Ep = plans_p(d,:)*dt;
-    fprintf('\n--- %s ---\n', datestr(td,'yyyy.m.dd'));
+    fprintf('\n--- %s ---\n', datestr(td,'yyyy.mm.dd'));
     fprintf('全天计划购电量 %.2f kWh, 计划购电费 %.2f 元\n', sum(Ep), plan_cost(d));
     for k = 1:6, fprintf('  %s: %.4f\n', nameT1{k}, Ep(rowT1(k))); end
     for k = 1:6
-        fprintf('  %s: 充电 %.4f  放电 %.4f\n', bname{k}, ...
-            sum(ch_r(d,blocks{k}))*dt, sum(dis_r(d,blocks{k}))*dt);
+        if k == 1
+            ebch = ch_r(d-1,144)*dt + sum(ch_r(d,1:23))*dt;
+            ebdis = dis_r(d-1,144)*dt + sum(dis_r(d,1:23))*dt;
+        else
+            ebch = sum(ch_r(d,blocks{k}))*dt; ebdis = sum(dis_r(d,blocks{k}))*dt;
+        end
+        fprintf('  %s: 充电 %.4f  放电 %.4f\n', bname{k}, ebch, ebdis);
     end
     s000 = 6000; if d > 1, s000 = Sall(d-1,144); end
     fprintf('  s(0:00)=%.2f, s(24:00)=%.2f\n', s000, Sall(d,144));
@@ -145,8 +150,13 @@ for i = 1:334
         r = (i-1)*6 + k + 1;
         if k == 1, C2{r,1} = dvec(d); end
         C2{r,2} = bname{k};
-        C2{r,3} = round(sum(ch_r(d,blocks{k}))*dt, 4);
-        C2{r,4} = round(sum(dis_r(d,blocks{k}))*dt, 4);
+        if k == 1
+            C2{r,3} = round(ch_r(d-1,144)*dt + sum(ch_r(d,1:23))*dt, 4);
+            C2{r,4} = round(dis_r(d-1,144)*dt + sum(dis_r(d,1:23))*dt, 4);
+        else
+            C2{r,3} = round(sum(ch_r(d,blocks{k}))*dt, 4);
+            C2{r,4} = round(sum(dis_r(d,blocks{k}))*dt, 4);
+        end
         if k == 1, C2{r,5} = '0:00';  C2{r,6} = round(s000,4); end
         if k == 2, C2{r,5} = '24:00'; C2{r,6} = round(Sall(d,144),4); end
     end

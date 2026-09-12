@@ -1,7 +1,7 @@
 %% CUMCM2026 C题 问题4 —— 波动电价下重算问题2/问题3
 % Q4-2 = 问题2策略(w1预测, γ=1.05, δ=0.98) × 附件4逐日电价 -> result4-2.xlsx
-% Q4-3 = 问题3策略(V4F, γ=1.02, δ=0.98) × 附件4逐日电价 -> result4-3.xlsx
-% 参考解(Python/HiGHS): Q4-2 总费用 15,263,635.75 元; Q4-3 总费用 14,488,183.97 元
+% Q4-3 = 问题3策略(V4FR: 备用>=4000, γ=1.02, δ=1.00) × 附件4逐日电价 -> result4-3.xlsx
+% 参考解(Python/HiGHS): Q4-2 总费用 15,263,635.75 元; Q4-3 总费用 14,393,752 元级(V4FR+备用, 精确见summary4.json)
 %   (恒定电价对照: Q2 14,546,503.97; Q3 13,825,637.87)
 clear; clc;
 thisdir = fileparts(mfilename('fullpath'));
@@ -34,7 +34,7 @@ fprintf('附件4电价: 均值 %.4f, 范围 [%.4f, %.4f], 日内价差均值 %.4
 %% ---------------- 2. 共享参数 ----------------
 ETA_C = 0.9; ETA_D = 0.9; PMAX = 5000; SMIN = 1200; SMAX = 10800;
 EMULT = 5; ADJ_PRE = 0.5;
-LAM_PV = 0.3; LAM_L = 0.4;
+LAM_PV = 0.1; LAM_L = 0.3;   % 费用网格寻优
 ADJ_T = [36 72 108]; ISSUE = [6 12 18];
 feb1 = 32;
 opts = optimoptions('linprog','Algorithm','dual-simplex','Display','off');
@@ -71,7 +71,7 @@ fprintf('总费用 %.2f 元 (恒定电价Q2: 14546503.97, 差 %+.2f)\n', C_p2+C_
 R2 = struct('plans_p',plans_p,'Emerg',Emerg,'ch_r',ch_r,'dis_r',dis_r,'Sall',Sall,'plan_cost',plan_cost);
 
 %% ================= 第二部分: Q4-3 =================
-GAMMA3 = 1.02; DELTA3 = 0.98;
+GAMMA3 = 1.02; DELTA3 = 1.00;              % 波动电价下重寻优: δ=1.00
 plans_p = zeros(NDAY,T); adj_p = zeros(NDAY,T);
 Emerg = zeros(NDAY,T); ch_r = zeros(NDAY,T); dis_r = zeros(NDAY,T);
 Sall = zeros(NDAY,T+1); plan_cost = zeros(NDAY,1);
@@ -183,8 +183,13 @@ for i = 1:334
         r = (i-1)*6 + k + 1;
         if k == 1, C2{r,1} = dvec(d); end
         C2{r,2} = bname{k};
-        C2{r,3} = round(sum(R.ch_r(d,blocks{k}))*dt, 4);
-        C2{r,4} = round(sum(R.dis_r(d,blocks{k}))*dt, 4);
+        if k == 1
+            C2{r,3} = round(R.ch_r(d-1,144)*dt + sum(R.ch_r(d,1:23))*dt, 4);
+            C2{r,4} = round(R.dis_r(d-1,144)*dt + sum(R.dis_r(d,1:23))*dt, 4);
+        else
+            C2{r,3} = round(sum(R.ch_r(d,blocks{k}))*dt, 4);
+            C2{r,4} = round(sum(R.dis_r(d,blocks{k}))*dt, 4);
+        end
         if k == 1, C2{r,5} = '0:00';  C2{r,6} = round(s000,4); end
         if k == 2, C2{r,5} = '24:00'; C2{r,6} = round(R.Sall(d,144),4); end
     end
@@ -295,7 +300,8 @@ f = zeros(M,1);
 f(ip) = price_vec(a:T)*dt; f(iu1) = ADJ_PRE*price_vec(a:T)*dt; f(iu2) = ADJ_PRE*price_vec(a:T)*dt; f(ie) = EMULT*price_vec(a:T)*dt;
 lb = zeros(M,1); ub = inf(M,1);
 ub(ich) = PMAX; ub(idi) = PMAX; lb(is) = SMIN; ub(is) = SMAX;
-[x, ~, exitflag] = linprog(f, [], [], Aeq, beq, lb, ub, opts);
+Aub = sparse(1, M); Aub(1, is(n+1)) = -1; bub = -4000;   % 末端最低备用 S(24:00)>=4000
+[x, ~, exitflag] = linprog(f, Aub, bub, Aeq, beq, lb, ub, opts);
 assert(exitflag==1, '调整LP不可行 a=%d', a);
 p = x(ip); ch = x(ich); dis = x(idi);
 end

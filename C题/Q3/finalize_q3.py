@@ -7,7 +7,7 @@ import openpyxl
 import solve_q3 as q
 
 BASE = q.BASE
-R = q.run_year("V4F", GAMMA=1.02, DELTA=0.98)
+R = q.run_year("V4FR", GAMMA=1.02, DELTA=0.98, S_MIN_END=4000.0)
 rep = slice(q.feb1, 365)
 price, NDAY, T, dt = q.price, q.NDAY, q.T, q.dt
 plans_p, adj_p = R["plans_p"], R["adj_p"]
@@ -23,7 +23,7 @@ viol = sum(1 for d in range(NDAY) for t in range(T)
            (dis_r[d, t] > 5000 - 1e-6 or Sall[d, t + 1] < 1200 + 1e-6)))
 assert viol == 0, f"紧急购电语义违规 {viol}"
 s = q.settle(R, rep)
-print("========== 问题3 最终策略 V4F (标定+双向调整+自由末端, γ=1.02, δ=0.98) ==========")
+print("========== 问题3 最终策略 V4FR (标定+双向调整+S(24:00)≥4000备用, γ=1.02, δ=0.98) ==========")
 print(f"校验全部通过. 年度(2.1-12.31):")
 print(f"  计划购电费(0:00计划口径) {s['plan_nominal']:,.2f} 元")
 print(f"  按调整量实付 {s['base']:,.2f} 元, 调整违约/溢价费 {s['fee_adj']:,.2f} 元(上下调各0.5倍)")
@@ -39,8 +39,12 @@ def tag(m):
     m %= 1440
     return f"{m//60}:{m%60:02d}{plus}"
 
-blocks = [[143] + list(range(0, 23))] + [list(range(a, b))
-         for a, b in [(23, 47), (47, 71), (71, 95), (95, 119), (119, 143)]]
+# 表2 钟点日时段块: "0:00-4:00" = 前一日末段(0:00-0:10) + 当日第1-23段
+def bsum(arr, d, k):
+    if k == 0:
+        return float(arr[d - 1][143] + arr[d][0:23].sum())
+    seg = [(23, 47), (47, 71), (71, 95), (95, 119), (119, 143)][k - 1]
+    return float(arr[d][seg[0]:seg[1]].sum())
 bnames = ["0:00-4:00","4:00-8:00","8:00-12:00","12:00-16:00","16:00-20:00","20:00-24:00"]
 idx_t1 = [59, 71, 83, 95, 107, 119]
 names_t1 = ["10:00-10:10","12:00-12:10","14:00-14:10",
@@ -75,8 +79,8 @@ for d in range(NDAY):
             "plan_total": float(Ep.sum()), "adj_total": float(Ea.sum()),
             "plan_cost": float(R["plan_cost"][d]),
             "adj_settle_cost": float((Ea * price).sum() + fee_dn),
-            "blocks": {n: [float(Ech[b].sum()), float(Edis[b].sum())]
-                       for n, b in zip(bnames, blocks)},
+            "blocks": {n: [bsum(ch_r * dt, d, k), bsum(dis_r * dt, d, k)]
+                       for k, n in enumerate(bnames)},
             "s000": float(Sall[d - 1][143] if d > 0 else 6000.0),
             "s2400": float(Sall[d][143]),
             "emerg_windows": emerg_windows(Emerg[d]),
@@ -123,9 +127,9 @@ for d in range(q.feb1, NDAY):
     Ech, Edis = ch_r[d] * dt, dis_r[d] * dt
     s000 = Sall[d - 1][143] if d > 0 else 6000.0
     s2400 = Sall[d][143]
-    for k, (n, b) in enumerate(zip(bnames, blocks)):
+    for k, n in enumerate(bnames):
         r = [q.dates[d] if k == 0 else None, n,
-             round(float(Ech[b].sum()), 4), round(float(Edis[b].sum()), 4)]
+             round(bsum(ch_r * dt, d, k), 4), round(bsum(dis_r * dt, d, k), 4)]
         if k == 0:   r += [_dt.time(0, 0), round(float(s000), 4)]
         elif k == 1: r += ["24:00", round(float(s2400), 4)]
         else:        r += [None, None]
