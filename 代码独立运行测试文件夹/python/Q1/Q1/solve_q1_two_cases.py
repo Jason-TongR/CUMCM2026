@@ -7,13 +7,12 @@ CUMCM 2026 C题 问题1 —— 双情形求解
 约定: 附件1 第 i 行(时刻戳)对应该时刻起点的 10 min 区间。
 """
 import json
-from pathlib import Path
 import numpy as np
 import openpyxl
 from scipy.optimize import linprog
 
-BASE = Path(__file__).resolve().parents[1]
-SRC = BASE / "附件" / "附件1.xlsx"
+BASE = "/home/jason/DataDisk/Jason's study/数学建模大赛/题目/CUMCM2026Problems/C题"
+SRC = BASE + "/附件/附件1.xlsx"
 
 wb = openpyxl.load_workbook(SRC, data_only=True)
 rows = [r for r in wb["Sheet1"].iter_rows(min_row=2, values_only=True)]
@@ -116,17 +115,17 @@ def report(name, res, Ep, Ech, Edis, Eq, s):
 resA = solve()
 EpA, EchA, EdisA, EqA, sA = postprocess(resA)
 sumA = report("情形 A: S(0) 自由优化", resA, EpA, EchA, EdisA, EqA, sA)
-write_xlsx(BASE / "Q1" / "result1.xlsx", EpA, EchA, EdisA, sA)
+write_xlsx(BASE + "/Q1/result1.xlsx", EpA, EchA, EdisA, sA)
 
 # ---- 情形 B: S(0)=6000 固定 ----
 resB = solve(s0_fixed=6000.0)
 EpB, EchB, EdisB, EqB, sB = postprocess(resB)
 sumB = report("情形 B: S(0)=S(24:00)=6000 kWh 固定", resB, EpB, EchB, EdisB, EqB, sB)
-write_xlsx(BASE / "Q1" / "result1_fix6000.xlsx", EpB, EchB, EdisB, sB)
+write_xlsx(BASE + "/Q1/result1_fix6000.xlsx", EpB, EchB, EdisB, sB)
 
 print(f"\n费用差: {resB.fun - resA.fun:+.4f} 元 "
       f"({(resB.fun - resA.fun)/resA.fun*100:+.4f}%)")
 json.dump({"A_free": sumA, "B_fix6000": sumB},
-          open(BASE / "Q1" / "summary1_two_cases.json", "w"),
+          open(BASE + "/Q1/summary1_two_cases.json", "w"),
           ensure_ascii=False, indent=1)
 print("已写出 result1.xlsx (情形A) 与 result1_fix6000.xlsx (情形B)")
