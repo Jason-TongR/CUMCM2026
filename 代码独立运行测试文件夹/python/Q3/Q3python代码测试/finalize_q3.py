@@ -98,7 +98,7 @@ for k, v in table3.items():
     print(f"  紧急购电: {[(w, round(x,2)) for w, x in v['emerg_windows']] if v['emerg_windows'] else '无'} (合计 {v['emerg_total']:.2f} kWh)")
 
 json.dump({"annual": s, "emerg_days": edays, "table3": table3},
-          open(BASE + "/Q3/summary3.json", "w"), ensure_ascii=False, indent=1)
+          open(BASE / "Q3" / "summary3.json", "w"), ensure_ascii=False, indent=1)
 
 # ---------- 写 result3.xlsx ----------
 out = openpyxl.Workbook()
@@ -142,9 +142,9 @@ for d in range(q.feb1, NDAY):
     for w, energy in emerg_windows(Emerg[d]):
         ws3.append([q.dates[d] if first else None, w, round(energy, 4)])
         first = False
-out.save(BASE + "/Q3/result3.xlsx")
+out.save(BASE / "Q3" / "result3.xlsx")
 print("\n已写出 result3.xlsx")
 
-np.savez(BASE + "/Q3/q3_data.npz", plans_p=plans_p, adj_p=adj_p, Emerg=Emerg,
+np.savez(BASE / "Q3" / "q3_data.npz", plans_p=plans_p, adj_p=adj_p, Emerg=Emerg,
          ch_r=ch_r, dis_r=dis_r, Sall=Sall, plan_cost=R["plan_cost"], allow_pickle=True)
 print("已保存 q3_data.npz")

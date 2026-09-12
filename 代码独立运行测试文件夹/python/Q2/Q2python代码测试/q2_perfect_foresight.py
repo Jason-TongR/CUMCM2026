@@ -6,10 +6,11 @@ Q2 完美预测费用下界 (图2"完美预测"柱的生成脚本)
       但预测=当天实际值(完美预测), 故无紧急购电。为费用理论下界。
 """
 import importlib.util
+from pathlib import Path
 import numpy as np
 
-BASE = "/home/jason/DataDisk/Jason's study/数学建模大赛/题目/CUMCM2026Problems/C题"
-spec = importlib.util.spec_from_file_location("q2", BASE + "/Q2/solve_q2.py")
+BASE = Path(__file__).resolve().parents[1]
+spec = importlib.util.spec_from_file_location("q2", BASE / "Q2" / "solve_q2.py")
 q2 = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(q2)
 

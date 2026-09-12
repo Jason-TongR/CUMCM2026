@@ -2,11 +2,12 @@
 # -*- coding: utf-8 -*-
 """Q2 策略寻优实验: 预测方法 × 余量系数 的全年总费用对比"""
 import numpy as np
+from pathlib import Path
 import openpyxl
 from scipy.optimize import linprog
 
-BASE = "/home/jason/DataDisk/Jason's study/数学建模大赛/题目/CUMCM2026Problems/C题"
-c1 = openpyxl.load_workbook(BASE + "/附件/附件1.xlsx", data_only=True)["Sheet1"]
+BASE = Path(__file__).resolve().parents[1]
+c1 = openpyxl.load_workbook(BASE / "附件" / "附件1.xlsx", data_only=True)["Sheet1"]
 rows1 = list(c1.iter_rows(min_row=2, values_only=True))
 price = np.array([float(r[1]) for r in rows1])
 L_typ = np.array([float(r[2]) for r in rows1])
@@ -17,8 +18,8 @@ def load_cols(path, sheet):
     rows = list(ws.iter_rows(min_row=2, values_only=True))
     return [r[0] for r in rows], np.array([[float(v) for v in r[1:145]] for r in rows])
 
-dates, LD = load_cols(BASE + "/附件/附件2.xlsx", "小区负载")
-_, PVD = load_cols(BASE + "/附件/附件2.xlsx", "光伏发电实际功率")
+dates, LD = load_cols(BASE / "附件" / "附件2.xlsx", "小区负载")
+_, PVD = load_cols(BASE / "附件" / "附件2.xlsx", "光伏发电实际功率")
 NDAY = 365
 T, dt = 144, 1.0 / 6.0
 ETA_C = ETA_D = 0.9

@@ -12,13 +12,14 @@ CUMCM 2026 C题 问题3 —— 计划+滚动调整购电策略
 约定: 时刻戳=区间起点; 调整区间起点(0基): 6:00→35, 12:00→71, 18:00→107
 """
 import json
+from pathlib import Path
 import numpy as np
 import openpyxl
 from scipy.optimize import linprog
 
-BASE = "/home/jason/DataDisk/Jason's study/数学建模大赛/题目/CUMCM2026Problems/C题"
+BASE = Path(__file__).resolve().parents[1]
 
-c1 = openpyxl.load_workbook(BASE + "/附件/附件1.xlsx", data_only=True)["Sheet1"]
+c1 = openpyxl.load_workbook(BASE / "附件" / "附件1.xlsx", data_only=True)["Sheet1"]
 rows1 = list(c1.iter_rows(min_row=2, values_only=True))
 price = np.array([float(r[1]) for r in rows1])
 L_typ = np.array([float(r[2]) for r in rows1])
@@ -29,11 +30,11 @@ def load_cols(path, sheet):
     rows = list(ws.iter_rows(min_row=2, values_only=True))
     return [r[0] for r in rows], np.array([[float(v) for v in r[1:145]] for r in rows])
 
-dates, LD = load_cols(BASE + "/附件/附件2.xlsx", "小区负载")
-_, PVD = load_cols(BASE + "/附件/附件2.xlsx", "光伏发电实际功率")
+dates, LD = load_cols(BASE / "附件" / "附件2.xlsx", "小区负载")
+_, PVD = load_cols(BASE / "附件" / "附件2.xlsx", "光伏发电实际功率")
 PVh = PVD.reshape(365, 24, 6).mean(2)
 Lh  = LD.reshape(365, 24, 6).mean(2)
-ws3 = openpyxl.load_workbook(BASE + "/附件/附件3.xlsx", data_only=True)["Sheet1"]
+ws3 = openpyxl.load_workbook(BASE / "附件" / "附件3.xlsx", data_only=True)["Sheet1"]
 rows3 = list(ws3.iter_rows(min_row=2, values_only=True))
 FORE = {}
 d_ = -1
@@ -299,4 +300,4 @@ if __name__ == "__main__":
         results[mode] = (R, s)
         print(f"{name:<26}{s['total']/1e4:>12.1f}{s['base']/1e4:>11.1f}"
               f"{s['fee_adj']/1e4:>11.1f}{s['emerg']/1e4:>11.1f}{s['E_emerg']/1e3:>9.1f}", flush=True)
-    np.save(BASE + "/Q3/results_variants.npy", results, allow_pickle=True)
+    np.save(BASE / "Q3" / "results_variants.npy", results, allow_pickle=True)

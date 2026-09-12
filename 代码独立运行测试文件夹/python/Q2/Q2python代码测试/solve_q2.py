@@ -8,13 +8,14 @@ CUMCM 2026 C题 问题2 —— 最终策略: w1预测(上周同星期) + 余量(
 输出: result2.xlsx (2025.2.1-12.31), summary2.json, q2_data.npz
 """
 import json
+from pathlib import Path
 import numpy as np
 import openpyxl
 from scipy.optimize import linprog
 
-BASE = "/home/jason/DataDisk/Jason's study/数学建模大赛/题目/CUMCM2026Problems/C题"
+BASE = Path(__file__).resolve().parents[1]
 
-c1 = openpyxl.load_workbook(BASE + "/附件/附件1.xlsx", data_only=True)["Sheet1"]
+c1 = openpyxl.load_workbook(BASE / "附件" / "附件1.xlsx", data_only=True)["Sheet1"]
 rows1 = list(c1.iter_rows(min_row=2, values_only=True))
 price = np.array([float(r[1]) for r in rows1])
 L_typ = np.array([float(r[2]) for r in rows1])
@@ -25,8 +26,8 @@ def load_cols(path, sheet):
     rows = list(ws.iter_rows(min_row=2, values_only=True))
     return [r[0] for r in rows], np.array([[float(v) for v in r[1:145]] for r in rows])
 
-dates, LD = load_cols(BASE + "/附件/附件2.xlsx", "小区负载")
-_, PVD = load_cols(BASE + "/附件/附件2.xlsx", "光伏发电实际功率")
+dates, LD = load_cols(BASE / "附件" / "附件2.xlsx", "小区负载")
+_, PVD = load_cols(BASE / "附件" / "附件2.xlsx", "光伏发电实际功率")
 NDAY = 365
 T, dt = 144, 1.0 / 6.0
 ETA_C = ETA_D = 0.9
@@ -191,7 +192,7 @@ if __name__ == "__main__":
     json.dump({"annual": {"E_plan": E_p, "C_plan": C_p, "E_emerg": E_e, "C_emerg": C_e,
                           "C_total": C_tot, "emerg_days": edays},
                "table3": table3},
-              open(BASE + "/Q2/summary2.json", "w"), ensure_ascii=False, indent=1)
+              open(BASE / "Q2" / "summary2.json", "w"), ensure_ascii=False, indent=1)
 
     # ---------- 写 result2.xlsx ----------
     out = openpyxl.Workbook()
@@ -227,10 +228,10 @@ if __name__ == "__main__":
         for w, energy in emerg_windows(Emerg[d]):
             ws3.append([dates[d] if first else None, w, round(energy, 4)])
             first = False
-    out.save(BASE + "/Q2/result2.xlsx")
+    out.save(BASE / "Q2" / "result2.xlsx")
     print("\n已写出 result2.xlsx")
 
-    np.savez(BASE + "/Q2/q2_data.npz", plans_p=plans_p, plans_ch=plans_ch,
+    np.savez(BASE / "Q2" / "q2_data.npz", plans_p=plans_p, plans_ch=plans_ch,
              plans_dis=plans_dis, Emerg=Emerg, Sall=Sall, plan_cost=plan_cost,
              ch_r=ch_r, dis_r=dis_r, allow_pickle=True)
     print("已保存 q2_data.npz")

@@ -9,10 +9,11 @@ Q4-3 = 问题3最终策略(V4FR: 备用>=4000, γ=1.02, δ=1.00) 换波动电价
 """
 import json
 import importlib.util
+from pathlib import Path
 import numpy as np
 import openpyxl
 
-BASE = "/home/jason/DataDisk/Jason's study/数学建模大赛/题目/CUMCM2026Problems/C题"
+BASE = Path(__file__).resolve().parents[1]
 
 def imp(path, name):
     spec = importlib.util.spec_from_file_location(name, path)
@@ -20,11 +21,11 @@ def imp(path, name):
     spec.loader.exec_module(m)
     return m
 
-q2 = imp(BASE + "/Q2/solve_q2.py", "q2")
-q3 = imp(BASE + "/Q3/solve_q3.py", "q3")
+q2 = imp(BASE / "Q2" / "solve_q2.py", "q2")
+q3 = imp(BASE / "Q3" / "solve_q3.py", "q3")
 
 # ---------- 附件4 波动电价 ----------
-ws4 = openpyxl.load_workbook(BASE + "/附件/附件4.xlsx", data_only=True)["Sheet1"]
+ws4 = openpyxl.load_workbook(BASE / "附件" / "附件4.xlsx", data_only=True)["Sheet1"]
 rows4 = list(ws4.iter_rows(min_row=2, values_only=True))
 dates4 = [r[0] for r in rows4]
 PM = np.array([[float(v) for v in r[1:145]] for r in rows4])   # 365×144 逐日电价
@@ -149,7 +150,7 @@ json.dump({"q42": {"E_plan": E_p2, "C_plan": C_p2, "E_emerg": E_e2,
                            "max": float(PM.max()),
                            "daily_spread_mean": float((PM.max(1) - PM.min(1)).mean())},
            "table3": table3},
-          open(BASE + "/Q4/summary4.json", "w"), ensure_ascii=False, indent=1)
+          open(BASE / "Q4" / "summary4.json", "w"), ensure_ascii=False, indent=1)
 
 # ---------- 写 result4-2.xlsx (同 result2 版式) ----------
 import datetime as _dt
@@ -192,13 +193,13 @@ def write_result4(fname, R, has_adj):
         for w, energy in emerg_windows(R["Emerg"][d]):
             ws3.append([dates[d] if first else None, w, round(energy, 4)])
             first = False
-    out.save(BASE + f"/Q4/{fname}")
+    out.save(BASE / "Q4" / fname)
 
 write_result4("result4-2.xlsx", R2, has_adj=False)
 write_result4("result4-3.xlsx", R3, has_adj=True)
 print("\n已写出 result4-2.xlsx, result4-3.xlsx")
 
-np.savez(BASE + "/Q4/q4_data.npz",
+np.savez(BASE / "Q4" / "q4_data.npz",
          R2_plans_p=R2["plans_p"], R2_Emerg=R2["Emerg"], R2_ch_r=R2["ch_r"],
          R2_dis_r=R2["dis_r"], R2_Sall=R2["Sall"], R2_plan_cost=R2["plan_cost"],
          R3_plans_p=R3["plans_p"], R3_adj_p=R3["adj_p"], R3_Emerg=R3["Emerg"],
