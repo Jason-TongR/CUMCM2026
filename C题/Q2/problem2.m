@@ -5,6 +5,7 @@
 %       富余: 减放电→加充电→弃光)
 % 参考解(Python/HiGHS): 总费用 14,546,504 元 = 计划 13,676,311 + 紧急 870,192 元,
 %   紧急购电量 145,134 kWh, 紧急天数 102/334。
+warning('off','all');
 clear; clc;
 thisdir = fileparts(mfilename('fullpath'));
 
