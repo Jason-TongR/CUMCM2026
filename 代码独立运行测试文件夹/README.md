@@ -5,7 +5,7 @@
 ## 一、目录结构
 
 ```text
-代码独立运行测试文件夹/
+源程序/
 ├─ matlab/
 │  ├─ Q1/Q1matlab代码测试/problem1.m
 │  ├─ Q2/Q2matlab代码测试/problem2.m
