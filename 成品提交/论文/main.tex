@@ -1,0 +1,95 @@
+% !TeX program = xelatex
+\documentclass{cumcmthesis}
+% \documentclass[withoutpreface,bwprint]{cumcmthesis} %去掉封面与编号页，电子版提交的时候使用。
+
+\usepackage[framemethod=TikZ]{mdframed}
+\usepackage{url}   % 网页链接
+\usepackage{subcaption} % 子标题、子图、子表格
+\usepackage{pifont}%提供大量的特殊符号、图标
+\usepackage{listings}%代码高亮包
+\usepackage{float} %管控图片、图表浮动体
+\usepackage{graphicx, booktabs, amsmath}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{tikz}   % 流程图
+\usetikzlibrary{positioning, shapes.geometric, shapes.misc, arrows.meta, calc, fit, backgrounds}
+
+% 图表编号加粗：与题注保持一致，正文中引用（\ref）时同样为加粗
+\renewcommand{\thefigure}{\textbf{\arabic{figure}}}
+\renewcommand{\thetable}{\textbf{\arabic{table}}}
+% 允许行内弹性间距，消除长数字/长单词造成的 overfull
+\emergencystretch=1.5em
+
+\title{基于预测与滚动优化的微网购电与储能调控策略}
+\tihao{C}
+\baominghao{202619055013}
+\schoolname{广东以色列理工学院}
+\membera{唐睿}
+\memberb{李想}
+\memberc{章文心}
+\supervisor{无}
+\yearinput{2026}
+\monthinput{09}
+\dayinput{13}
+
+\begin{document}
+
+\maketitle  % 输出标题区（标题 / 作者 / 日期），必须在 document 环境内
+\begin{abstract}
+针对分布式光伏渗透率不断提高、购电与储能需在不确定环境下协调的问题，本文以某非孤岛式微网为对象，
+围绕日前计划购电、日内偏差处理与波动电价适应三项任务，建立四种信息条件下的购电与储能优化模型，
+并给出全年滚动求解结果。
+
+\textbf{针对问题一}，在每天电价与小区负载相同、光伏预测已知的条件下，
+以各 10\,min 时段的购电功率、储能充放电功率与弃光功率为决策变量，
+以功率平衡、储能容量与功率限额、储电量日循环为约束，建立全天购电费用最小的线性规划模型并求得全局最优解。
+取附录 1 给定的初始储电量（6000\,kWh）时，全天购电量 59482.70\,kWh，
+购电费用 \textbf{35126.95 元}，无弃光；较不配置储能（48052.05 元）日节省 12925.10 元（26.9\%）。
+首末储电量自由确定的对照情形（8550\,kWh，35118.60 元）仅差 8.35 元（附录 A）。
+
+\textbf{针对问题二}，考虑负载与光伏逐日变化、供电不足按 5 倍电价紧急购电的情形，构建
+“日前预测—优化计划—日内纠偏”的全年滚动调控模型。数据分析发现负载具有星期型双状态结构
+（周日至周四约 124\,MWh、周五周六约 78\,MWh），据此采用上周同星期实际值预测，
+并依据报童模型确定购电余量（负载 $\times$1.05、光伏 $\times$0.98）；
+每天 0:00 求解日循环线性规划得到计划购电量，日内由储能优先吸收预测偏差，不足时触发紧急购电。
+2025 年 2 月 1 日至 12 月 31 日（334 天）总费用为 \textbf{1454.65 万元}，紧急购电量 14.5 万\,kWh（102 天），较持续性预测基准（2244.8 万元）降低 35.2\%。
+
+\textbf{针对问题三}，对四个发布时刻的光伏预报作精度诊断，发现同一目标时刻的预报精度并不随发布时间改善，
+且存在上午低估、午后高估的系统性偏差。据此采用 MOS 方法融合官方预报与历史同期信息，并以当日已实现残差
+修正，建立 6:00、12:00、18:00 的双向调整线性规划模型（偏离计划按 0.5 倍或 1.5 倍电价结算），
+引入日末最低备用约束（$\ge$4000\,kWh）抑制储能短视放电。结果表明，全年总费用降至 \textbf{1368.75 万元}，
+较问题二策略再降 5.9\%，紧急购电费由 87.0 万元降至 30.4 万元；
+后续预报必须经标定后使用，调整机制本身价值显著。
+
+\textbf{针对问题四}，将固定电价替换为逐日波动的实时电价，在问题二、三框架下重新求解。
+两种策略全年总费用分别为 \textbf{1526.36 万元}与 \textbf{1431.56 万元}，
+较固定电价上升 4.93\% 与 4.59\%，问题三策略仍优 6.21\%。费用上升并非源于电价均值变化
+（两种情形全年均价均为 0.7662 元/kWh），而源于电价与负载的强正相关（0.898）形成的“价—荷同峰”效应；
+波动电价还使储能周转量提升 5\%$\sim$7\%，调整策略对价格波动表现出更好的适应性。
+
+模型通过能量守恒、跨日衔接与费用分解等全链路数值校验；
+余量系数、残差更新权重与末端备用水平在合理范围内变化时总费用变化小于 1\%，参数选择稳健。
+
+\textbf{关键词：}微网；储能系统；购电策略；滚动优化；线性规划
+
+\end{abstract}
+
+\input{chapter/1_restatement}   % 一、问题重述
+\input{chapter/2_analysis}      % 二、问题分析
+\input{chapter/3_assumptions}   % 三、模型假设
+\input{chapter/4_notation}      % 四、符号说明
+\input{chapter/5_model_q1}      % 五、问题一模型的建立与求解
+\input{chapter/6_model_q2}      % 六、问题二模型的建立与求解
+\input{chapter/7_model_q3}      % 七、问题三模型的建立与求解
+\input{chapter/8_model_q4}      % 八、问题四模型的建立与求解
+\input{chapter/9_sensitivity}   % 九、灵敏度分析与误差分析
+\input{chapter/10_evaluation}   % 十、模型评价与推广
+\input{chapter/11_ai_declaration} % 十一、AI声明
+\input{chapter/12_reference}    % 十二、参考文献
+
+\appendix
+\input{chapter/A_appendix}      % 附录A 问题一对照情形（自由初始储电量）
+\input{chapter/B_files}         % 附录B 支撑材料文件列表
+
+\end{document}

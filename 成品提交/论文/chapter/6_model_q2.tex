@@ -1,0 +1,255 @@
+\section{问题二模型的建立与求解}
+
+\subsection{建模思路}
+问题二中负载与光伏出力不再具有固定日内规律，日前计划与实际运行之间存在预测偏差，
+供电不足需以正常电价的 5 倍紧急购电。因此在问题一优化内核的基础上，
+引入负载与光伏预测、预测余量及日内实时纠偏机制，构建“日前预测—计划优化—实时纠偏—跨日滚动”的调控模型：
+先由全年数据分析选择预测方法，再经余量修正后求解日前计划线性规划，
+实际运行时由储能优先吸收预测偏差、不足时紧急购电，日末实际储电量传递至次日。
+
+\subsection{数据规律分析与日前预测模型}
+对附件 2 中 2025 年实际负载和光伏数据进行统计分析，结果如图~\ref{fig:q2-data} 所示。
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=0.485\textwidth]{Q2_weekday_box.pdf}\hfill
+\includegraphics[width=0.485\textwidth]{Q2_annual_load_pv.pdf}
+\caption{2025 年负载与光伏出力时序特征：（左）按星期分组的日负载电量箱线图；
+（右）全年逐日负载与光伏电量}
+\label{fig:q2-data}
+\end{figure}
+
+由图~\ref{fig:q2-data}（左）可知，小区日负载具有显著的星期周期特征：
+周日至周四日负载均值约 124.0\,MWh，周五、周六仅约 78.3\,MWh（比值 0.63），呈稳定的星期型双状态结构；
+若直接采用前一日数据预测当日负载，在周四至周五、周六至周日的状态切换时将产生很大偏差。
+由图~\ref{fig:q2-data}（右）可知，负载在星期周期之上还存在温和的季节波动；
+光伏日发电量呈明显季节性，且相邻日自相关系数约 0.964\cite{fpp3}，
+近期历史光伏数据对当日出力有较强参考价值。
+
+综合上述特征，本文采用上周同星期日预测法（w1）\cite{fpp3} 构造日前预测：
+对第 $d$ 日第 $t$ 个时段，
+\begin{equation}
+\hat{L}_{d,t}=L_{d-7,t},\qquad \hat{P}^{pv}_{d,t}=P^{pv}_{d-7,t}
+\end{equation}
+该预测仅使用计划时刻已获得的历史数据，避免未来信息泄漏，同时保留负载的星期周期结构与光伏的近期变化特征。
+作为对照，本文同时构建持续性预测、近 2 个和近 4 个同星期日均值预测（w2、w4）与 7 日移动平均预测（ma7），
+以全年运行总费用为指标比较（结果见第九章表~\ref{tab:sens-q2}）。
+
+\subsection{预测余量设置与参数寻优}
+日前预测不可避免存在误差：当实际净负荷高于预测时产生 5 倍电价的紧急购电费用，
+而适度多购仅增加约 1 倍电价的正常购电成本——预测偏低与偏高的经济损失明显\textbf{不对称}，
+恰为报童模型结构\cite{arrow1951}：临界分位数 $(5-1)/5=0.8$，即日前计划应覆盖净负荷约 80\% 分位数而非中位数。
+据此引入负载余量系数 $\gamma$ 与光伏余量系数 $\delta$ 对预测作保守修正：
+\begin{equation}
+L^{*}_{d,t}=\gamma\hat{L}_{d,t},\qquad P^{pv,*}_{d,t}=\delta\hat{P}^{pv}_{d,t},\qquad
+\gamma\ge1,\ 0<\delta\le1 .
+\end{equation}
+以全年计划购电费用与紧急购电费用之和为评价指标，对各候选预测方法与余量参数组合作网格搜索与全年滚动仿真，
+最终选取 w1 预测与
+\begin{equation}
+\gamma=1.05,\qquad \delta=0.98
+\end{equation}
+即负载预测上调 5\%、光伏预测下调 2\%。按全年均值折算，其对净负荷的等效余量约 12\%，
+与报童 0.8 分位所需安全水平量级一致；总费用曲面在 $\gamma\in[1.03,1.07]$ 为平坦平台（详见第九章）。
+
+\subsection{日前计划购电优化模型}
+以余量修正后的预测作为每日 0:00 的已知信息，在问题一线性规划的基础上建立第 $d$ 日的日前计划模型：
+\begin{equation}
+\min\ C^{plan}_{d}=\sum_{t=1}^{144} c_t\,p_{d,t}\,\Delta t
+\end{equation}
+满足计划功率平衡与储能约束
+\begin{gather}
+p_{d,t}+P^{pv,*}_{d,t}+u^{dis}_{d,t}=L^{*}_{d,t}+u^{ch}_{d,t}+q_{d,t},\\
+S_{d,t}=S_{d,t-1}+\eta_c u^{ch}_{d,t}\Delta t-\frac{u^{dis}_{d,t}\Delta t}{\eta_d},\\
+1200\le S_{d,t}\le 10800,\qquad 0\le u^{ch}_{d,t},u^{dis}_{d,t}\le 5000 .
+\end{gather}
+
+问题二同时涉及\textbf{日前计划状态}与\textbf{实际运行状态}。
+每日 0:00 以储能实际储电量 $S_{d,0}$ 为初始状态规划全天储能轨迹，
+为避免模型通过消耗已有储能人为压低当日计划费用，在计划层面设置首末储电量相等约束
+\begin{equation}
+S^{plan}_{d,144}=S_{d,0}
+\end{equation}
+该约束仅作用于计划轨迹；实际运行因预测偏差由储能纠偏，实际日末储电量 $S^{real}_{d,144}$
+可与计划值不同，并作为次日初始状态 $S_{d+1,0}=S^{real}_{d,144}$ 实现跨日连续传递。
+
+实际运行中产生的紧急购电费用按当日真实数据与纠偏结果计算：
+\begin{equation}
+C^{em}_{d}=\sum_{t=1}^{144} 5\,c_t\,e_{d,t}\,\Delta t,\qquad
+C_{total}=\sum_{d}\left(C^{plan}_{d}+C^{em}_{d}\right).
+\end{equation}
+需要指出，$C_{total}$ 并非日前线性规划直接优化的目标，
+而是评价不同预测方法与余量参数下全年策略实际经济效果的指标。
+
+\subsection{日内实时纠偏策略}
+定义执行日前计划后第 $t$ 时段的实时功率缺口：
+\begin{equation}
+D_{d,t}=L^{real}_{d,t}-\left[p^{plan}_{d,t}+P^{pv,real}_{d,t}+u^{dis,plan}_{d,t}-u^{ch,plan}_{d,t}\right]
+\end{equation}
+$D_{d,t}>0$ 表示按计划执行后仍有供电缺口，$D_{d,t}<0$ 表示电力富余。
+纠偏严格按成本由低到高的优先级进行（流程见图~\ref{fig:q2-flow}）：
+
+\textbf{（1）供电不足}（$D_{d,t}>0$）：\fbox{减少计划充电 $\rightarrow$ 增加储能放电 $\rightarrow$ 紧急购电}。
+先减少该时段计划充电功率将电能直接用于负荷；仍有缺口则在功率与最低储电量约束内增加放电；
+储能达调节极限后，剩余缺口按当时电价 5 倍紧急购电。
+
+\textbf{（2）电力富余}（$D_{d,t}<0$）：\fbox{减少计划放电 $\rightarrow$ 增加储能充电 $\rightarrow$ 弃置剩余电量}。
+
+\textbf{（3）状态更新。} 每时段纠偏后按实际充放电功率更新储电量
+$S^{real}_{d,t}=S^{real}_{d,t-1}+\eta_c u^{ch,real}_{d,t}\Delta t-u^{dis,real}_{d,t}\Delta t/\eta_d$，
+日末传至次日。
+
+\begin{figure}[!htbp]
+\centering
+\footnotesize
+\begin{tikzpicture}[
+  >=Stealth,
+  node distance=6mm,
+  io/.style={rectangle, rounded corners=2mm, draw=black!75, fill=gray!12, align=center,
+             text width=66mm, minimum height=8mm, inner sep=2pt},
+  proc/.style={rectangle, draw=black!70, fill=blue!6, align=center,
+             text width=66mm, minimum height=7mm, inner sep=2pt},
+  dec/.style={diamond, draw=black!75, fill=yellow!20, aspect=3.2, align=center, inner sep=1pt},
+  act/.style={rectangle, rounded corners=1mm, draw=black!70, fill=green!10, align=center,
+             text width=50mm, minimum height=8mm, inner sep=2pt},
+  line/.style={draw, -Latex, thick}
+]
+  \node[io]   (in) {第 $t$ 个 $10\,$min 时段：按日前计划执行后计算功率缺口 $D_{d,t}$};
+  \node[dec]  (d1) [below=of in] {$D_{d,t}>0$？};
+  \node[act]  (a1) [right=12mm of d1] {（1）减少计划充电\\ （2）增加储能放电\\ （3）紧急购电（单价 $5c_t$）};
+  \node[dec]  (d2) [below=of d1] {$D_{d,t}<0$？};
+  \node[act]  (a2) [right=12mm of d2] {（1）减少计划放电\\ （2）增加储能充电\\ （3）弃置剩余电量};
+  \node[proc] (ex) [below=of d2] {按日前计划执行};
+  \node[proc] (up) [below=of ex] {更新实际储电量 $S^{real}_{d,t}$，进入下一时段};
+  \draw[line] (in.south) -- (d1.north);
+  \draw[line] (d1.south) -- node[left] {否} (d2.north);
+  \draw[line] (d2.south) -- node[left] {否} (ex.north);
+  \draw[line] (ex.south) -- (up.north);
+  \draw[line] (d1.east) -- node[above] {是} (a1.west);
+  \draw[line] (d2.east) -- node[above] {是} (a2.west);
+  \coordinate (r1) at ([xshift=8mm]a1.east);
+  \coordinate (r2) at ([xshift=8mm]a2.east);
+  \draw[line] (a1.east) -- (r1);
+  \draw[line] (a2.east) -- (r2);
+  \draw[draw, thick] (r1) -- (r2);
+  \draw[line] (r2) |- (up.east);
+\end{tikzpicture}
+\caption{日内实时纠偏决策流程（第 $d$ 日第 $t$ 时段）}
+\label{fig:q2-flow}
+\end{figure}
+
+\subsection{全年滚动求解流程}
+按题目给定条件设 2025 年 1 月 1 日 0:00 储能初始储电量 $S^{real}_{1,0}=6000$\,kWh，
+随后按“\textbf{日前预测—余量修正—计划优化—实时纠偏—状态传递}”逐日滚动求解全年。
+由于 w1 预测需要 7 天历史数据，1 月为预热期；
+按题目要求，最终统计 \textbf{2025 年 2 月 1 日至 12 月 31 日共 334 天}的计划购电量、
+计划购电费用及紧急购电费用。
+
+\subsection{求解结果与分析}
+全年滚动求解结果为：报告期内计划购电总量 22320727.5\,kWh，计划购电费用 13676311.49 元；
+全年紧急购电总量 145133.8\,kWh（102 天发生），紧急购电费用 870192.48 元。
+实际购电总费用
+\begin{equation}
+C_{total}=13676311.49+870192.48=\textbf{14546503.97 元}\approx1454.65\ \text{万元}.
+\end{equation}
+紧急购电量仅占外网购电量的 0.6\%，
+说明日前预测与安全余量覆盖了大部分负荷偏差，储能进一步承担了日内误差的实时调节。
+全年每日紧急购电量分布如图~\ref{fig:q2-emerg-year} 所示。
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=0.94\textwidth]{Q2_emergency_year.pdf}
+\caption{2025 年 2--12 月每日紧急购电量分布（虚线为题目指定的四个日期）：
+全年共 102 天发生紧急购电，合计 14.5 万\,kWh，集中于 6 月与 12 月的负载状态切换期}
+\label{fig:q2-emerg-year}
+\end{figure}
+
+\textbf{（1）指定日期购电结果。}
+按题目要求统计 2025 年 3 月 20 日、6 月 21 日、9 月 23 日和 12 月 21 日的结果，
+如表~\ref{tab:q2-plan}--\ref{tab:q2-emerg} 所示
+（表~\ref{tab:q2-chdis} 的时段块按钟点日划分：“0:00--4:00”块为当日 0:00--0:10 至 0:10--4:00 共 24 个区间，
+与同排 0:00 储电量严格对应）。
+
+\begin{table}[!htbp]
+\caption{四个指定日期微网在指定时间段的计划购电量及全天的购电量和购电费}\label{tab:q2-plan}
+\centering
+\small
+\setlength{\tabcolsep}{3.5pt}
+\begin{tabular}{lccccccrr}
+\toprule
+日期 & 10:00--10:10 & 12:00--12:10 & 14:00--14:10 & 16:00--16:10 & 18:00--18:10 & 20:00--20:10 & 全天/kWh & 购电费/元 \\
+\midrule
+2025-03-20 & 0.0000 & 822.2488 & 0.0000 & 493.8229 & 759.4335 & 0.0000 & 78872.98 & 48644.97 \\
+2025-06-21 & 0.0000 & 0.0000 & 0.0000 & 139.1066 & 451.7126 & 0.0000 & 38441.60 & 21995.11 \\
+2025-09-23 & 0.0000 & 627.7958 & 0.0000 & 401.8831 & 833.4051 & 9.9357 & 70972.59 & 44123.14 \\
+2025-12-21 & 0.0000 & 1023.8313 & 0.0000 & 857.8885 & 753.0828 & 0.0000 & 100592.96 & 65063.32 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[!htbp]
+\caption{四个指定日期储能设备在指定时间段的充、放电量（实际值，单位：kWh）}\label{tab:q2-chdis}
+\centering
+\small
+\setlength{\tabcolsep}{3.5pt}
+\begin{tabular}{lcccccccc}
+\toprule
+ & \multicolumn{2}{c}{2025-03-20} & \multicolumn{2}{c}{2025-06-21} & \multicolumn{2}{c}{2025-09-23} & \multicolumn{2}{c}{2025-12-21} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}\cmidrule(lr){8-9}
+时间段 & 充电量 & 放电量 & 充电量 & 放电量 & 充电量 & 放电量 & 充电量 & 放电量 \\
+\midrule
+0:00--4:00   & 119.4939   & 96.7901   & 209.2249  & 2844.3902 & 177.3126   & 11.5808   & 272.7706   & 132.1232 \\
+4:00--8:00   & 1317.6609  & 3157.2466 & 252.6738  & 5322.7460 & 34.2821    & 6151.4626 & 919.6894   & 644.8460 \\
+8:00--12:00  & 5604.5696  & 3265.5568 & 9620.9855 & 0.0000    & 4414.4148  & 2387.9403 & 5182.9578  & 7883.6687 \\
+12:00--16:00 & 1321.6289  & 254.7228  & 0.0000    & 0.0000    & 6638.1387  & 440.9339  & 7290.8424  & 2220.1094 \\
+16:00--20:00 & 16.6683    & 4501.1868 & 150.9449  & 4915.2439 & 342.0831   & 5001.9810 & 0.0000     & 4606.0024 \\
+20:00--24:00 & 10054.6548 & 3656.5848 & 9694.1410 & 3059.2756 & 10077.1714 & 3606.4323 & 10159.0080 & 3622.7941 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[!htbp]
+\caption{四个指定日期的 0:00 与 24:00 储电量（单位：kWh）及紧急购电情况}\label{tab:q2-emerg}
+\centering
+\small
+\begin{tabular}{lccc}
+\toprule
+日期 & 0:00 储电量 & 24:00 储电量 & 紧急购电时段与电量 \\
+\midrule
+2025-03-20 & 10800.00 & 10800.00 & 无 \\
+2025-06-21 & 10800.00 & 10800.00 & 无 \\
+2025-09-23 & 10653.29 & 10612.43 & 无 \\
+2025-12-21 & 10590.08 & 10800.00 & 8:00--8:10，5.6161\,kWh \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{（2）典型日实际运行结果分析。}
+选取负载状态切换日 2025 年 12 月 21 日（周六$\to$周日）分析日前计划与日内纠偏的实际运行过程，
+如图~\ref{fig:q2-plan-actual} 所示。
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=0.94\textwidth]{Q2_plan_vs_actual.pdf}
+\caption{2025 年 12 月 21 日日前计划与实际运行对照：(a) 分时电价与计划购电功率（竖线处标注题目指定 6 时段的购电量，kWh）；
+(b) 日前计划储电量与实际储电量轨迹（虚线为储电量上下限 1200/10800\,kWh）}
+\label{fig:q2-plan-actual}
+\end{figure}
+
+由图~\ref{fig:q2-plan-actual}(a) 可知，计划购电功率并不简单跟随电价或负载：
+在 8:00--11:00 与 17:00--21:00 高电价时段被压至较低水平，在 0:00--8:00 低电价时段维持较高购电功率，
+为储能补充电量，实现电能的“低储高放”；w1 预测较好地跟踪了实际负载与光伏的整体变化，仅局部时段存在偏差。
+由图~\ref{fig:q2-plan-actual}(b) 可知，实际储电量轨迹与计划总体一致，
+但在预测偏差累积时段明显偏离：10:30--11:00 与 21:00 前后实际储电量一度接近运行下限 1200\,kWh，
+表明储能调节能力已被充分调用；全天始终未越限。
+当日仅在 8:00--8:10 出现 5.62\,kWh 短时紧急购电：该时段计划购电功率仅约 600$\sim$700\,kW
+并由储能满功率放电顶峰，任何微小偏差都会立即触发紧急购电——
+这正是“预测已很准为何仍有紧急购电”的机理答案。
+作为对照，持续性预测基准在当日产生紧急购电 42.9\,MWh（状态切换日预测失效），
+w1 预测将其基本消除——这正是数据规律分析的价值所在。
+
+\textbf{（3）结果小结。}
+所建立的调控策略形成“日前优化—储能纠偏—紧急购电兜底”的分层调控机制：
+全年总购电费用 1454.65 万元，较持续性预测基准（2244.8 万元）降低 35.2\%，
+较完美预测理论下界（1224.5 万元）的残余预测误差代价为 230.2 万元（15.8\%），
+为后续策略比较与模型检验提供了基础。
