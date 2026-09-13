@@ -1,0 +1,42 @@
+{
+    // 本模板强制使用 XeLaTeX（cumcmthesis.cls 里会检测并报错）。
+    // 这里让 LaTeX Workshop 默认就用 xelatex 走 latexmk，双击/保存即可编译。
+    "latex-workshop.latex.recipe.default": "xelatex",
+    "latex-workshop.latex.tools": [
+        {
+            "name": "latexmk",
+            "command": "latexmk",
+            "args": [
+                "-xelatex",
+                "-synctex=1",
+                "-interaction=nonstopmode",
+                "-file-line-error",
+                "%DOC%"
+            ],
+            "env": {}
+        },
+        {
+            "name": "xelatex",
+            "command": "xelatex",
+            "args": [
+                "-synctex=1",
+                "-interaction=nonstopmode",
+                "-file-line-error",
+                "%DOC%"
+            ],
+            "env": {}
+        }
+    ],
+    "latex-workshop.latex.recipes": [
+        {
+            "name": "xelatex",
+            "tools": ["latexmk"]
+        }
+    ],
+    "latex-workshop.latex.autoBuild.run": "onSave",
+    "latex-workshop.latex.clean.subfolder.enabled": true,
+    "latex-workshop.latex.clean.fileTypes": [
+        ".aux", ".log", ".out", ".toc", ".fls", ".fdb_latexmk", ".synctex.gz", ".xdv", ".bbl", ".blg"
+    ],
+    "latex-workshop.view.pdf.viewer": "tab"
+}
