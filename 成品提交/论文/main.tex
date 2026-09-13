@@ -20,6 +20,15 @@
 \renewcommand{\thetable}{\textbf{\arabic{table}}}
 % 允许行内弹性间距，消除长数字/长单词造成的 overfull
 \emergencystretch=1.5em
+% 附录源代码排版样式
+\lstset{
+  basicstyle=\ttfamily\scriptsize,
+  numbers=left, numberstyle=\tiny\color{black!55}, numbersep=6pt,
+  columns=fullflexible, keepspaces=true, breaklines=true, breakatwhitespace=false,
+  showstringspaces=false, frame=single, framesep=2mm, xleftmargin=2em,
+  commentstyle=\color{black!60}, keywordstyle=\bfseries,
+  extendedchars=true, escapechar=`,
+}
 
 \title{基于预测与滚动优化的微网购电与储能调控策略}
 \tihao{C}
@@ -91,5 +100,6 @@
 \appendix
 \input{chapter/A_appendix}      % 附录A 问题一对照情形（自由初始储电量）
 \input{chapter/B_files}         % 附录B 支撑材料文件列表
+\input{chapter/C_code}          % 附录C 源程序
 
 \end{document}

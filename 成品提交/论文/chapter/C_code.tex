@@ -1,0 +1,41 @@
+\section{源程序}
+
+以下给出四个问题的全部可运行源程序。MATLAB 版与 Python 版为同一算法的双实现，
+二者结果逐位一致（运行环境、数据路径说明见支撑材料 README）。
+
+\subsection{MATLAB 程序}
+
+\subsubsection{问题一：problem1.m（日循环线性规划，双情形）}
+\lstinputlisting[language=Matlab]{code/problem1.m}
+
+\subsubsection{问题二：problem2.m（w1 预测 $+$ 余量 $+$ 日前 LP $+$ 日内纠偏，全年滚动）}
+\lstinputlisting[language=Matlab]{code/problem2.m}
+
+\subsubsection{问题三：problem3.m（预报标定 $+$ 残差修正 $+$ 双向调整 LP，全年滚动）}
+\lstinputlisting[language=Matlab]{code/problem3.m}
+
+\subsubsection{问题四：problem4.m（波动电价下的问题二、三策略重算）}
+\lstinputlisting[language=Matlab]{code/problem4.m}
+
+\subsection{Python 程序}
+
+\subsubsection{问题一：solve\_q1\_two\_cases.py（日循环线性规划，双情形）}
+\lstinputlisting[language=Python]{code/solve_q1_two_cases.py}
+
+\subsubsection{问题二：solve\_q2.py（w1 预测 $+$ 余量 $+$ 日前 LP $+$ 日内纠偏，全年滚动）}
+\lstinputlisting[language=Python]{code/solve_q2.py}
+
+\subsubsection{问题二：q2\_experiments.py（预测方法与余量参数的网格寻优实验）}
+\lstinputlisting[language=Python]{code/q2_experiments.py}
+
+\subsubsection{问题二：q2\_perfect\_foresight.py（完美预测理论下界）}
+\lstinputlisting[language=Python]{code/q2_perfect_foresight.py}
+
+\subsubsection{问题三：solve\_q3.py（预报标定 $+$ 残差修正 $+$ 双向调整 LP，策略变体）}
+\lstinputlisting[language=Python]{code/solve_q3.py}
+
+\subsubsection{问题三：finalize\_q3.py（最终策略 V4FR 年度仿真与结果输出）}
+\lstinputlisting[language=Python]{code/finalize_q3.py}
+
+\subsubsection{问题四：solve\_q4.py（波动电价下的问题二、三策略重算）}
+\lstinputlisting[language=Python]{code/solve_q4.py}
